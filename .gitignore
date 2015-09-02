@@ -1,2 +1,22 @@
 tmp/
 .vagrant/
+
+*~
+*#
+.#*
+\#*#
+.*.sw[a-z]
+*.un~
+pkg/
+
+# Berkshelf
+.vagrant
+Berksfile.lock
+
+# Bundler
+Gemfile.lock
+bin/*
+.bundle/*
+
+*.tar.gz
+*.logdir_IS_UNDEFINED/
