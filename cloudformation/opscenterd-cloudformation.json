@@ -1,0 +1,140 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "InstanceType": {
+      "Type": "String",
+      "Default": "t2.micro",
+      "ConstraintDescription": "must be a valid EC2 instance type"
+    },
+    "VpcId": {
+      "Type": "String",
+      "ConstraintDescription": "must be an existing VPC ID"
+    },
+    "SubnetId": {
+      "Type": "String",
+      "ConstraintDescription": "must be an existing subnet ID"
+    },
+    "SecurityGroupId": {
+      "Type": "String",
+      "ConstraintDescription": "must be an existing security group ID"
+    },
+    "KeyName": {
+      "Type": "String",
+      "ConstraintDescription": "must be an existing key pair name"
+    },
+    "Ec2InstanceRole": {
+      "Type": "String",
+      "ConstraintDescription": "must be an existing IAM role with the proper policies"
+    },
+    "Ec2OpscenterdIp": {
+      "Type": "String",
+      "ConstraintDescription": "the private IP of OpsCenterd node"
+    },
+    "CookbookS3": {
+      "Type": "String",
+      "ConstraintDescription": "the S3 path to the cookbook tar.gz file"
+    }
+  },
+  "Mappings": {
+    "RegionMap": {
+      "eu-west-1": {
+        "AMI": "ami-c15f79b6"
+      }
+    }
+  },
+  "Resources": {
+    "Ec2Opscenterd": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "NetworkInterfaces": [
+          {
+            "AssociatePublicIpAddress": true,
+            "DeviceIndex": "0",
+            "PrivateIpAddress": {
+              "Ref": "Ec2OpscenterdIp"
+            },
+            "SubnetId": {
+              "Ref": "SubnetId"
+            },
+            "GroupSet": [
+              {
+                "Ref": "SecurityGroupId"
+              }
+            ]
+          }
+        ],
+        "KeyName": {
+          "Ref": "KeyName"
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -ex\n",
+                "aws s3 cp '",
+                {
+                  "Ref": "CookbookS3"
+                },
+                "' cookbook.tar.gz\n",
+                "chef-solo -r cookbook.tar.gz -o \"recipe[cassandra-example::opscenterd]\"\n"
+              ]
+            ]
+          }
+        },
+        "ImageId": {
+          "Fn::FindInMap": [
+            "RegionMap",
+            {
+              "Ref": "AWS::Region"
+            },
+            "AMI"
+          ]
+        },
+        "IamInstanceProfile": {
+          "Ref": "InstanceRoleInstanceProfile"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "opscenter"
+          }
+        ]
+      }
+    },
+    "InstanceRoleInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          {
+            "Ref": "Ec2InstanceRole"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "Ec2PublicDnsName": {
+      "Description": "The DNS name of the EC2 instance",
+      "Value": {
+        "Fn::GetAtt": [
+          "Ec2Opscenterd",
+          "PublicDnsName"
+        ]
+      }
+    },
+    "Ec2PrivateIp": {
+      "Description": "The private IP of the EC2 instance",
+      "Value": {
+        "Fn::GetAtt": [
+          "Ec2Opscenterd",
+          "PrivateIp"
+        ]
+      }
+    }
+  }
+}

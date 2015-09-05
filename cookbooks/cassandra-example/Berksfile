@@ -1,3 +1,5 @@
 source "https://supermarket.chef.io"
 
+cookbook 'cassandra-dse', git: 'git@github.com:ryan-ju/cassandra-chef-cookbook.git', branch: 'issue223'
+
 metadata

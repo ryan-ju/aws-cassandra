@@ -10,21 +10,9 @@ Vagrant.configure(2) do |config|
   # For a complete reference, please see the online documentation at
   # https://docs.vagrantup.com.
 
-  # Settings
-  ## The total number of nodes (including seeds)
-  NODE_COUNT = 1
-  ## The number of seeds
-  SEED_NODE_COUNT = 1
-  ## The network prefix
-  NETWORK = '192.168.2.'
-  ## The first ip of the cluster.  The first 'SEED_NODE_COUNT' ips will be assigned to seed nodes.
-  FIRST_IP = 100
-  ## The ip of opscenterd
-  OPSCENTER_SERVER_IP = 254
-
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://atlas.hashicorp.com/search.
-  config.vm.box = "stackoverflower/ubuntu-jdk8-chef"
+  config.vm.box = "dummy"
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
@@ -38,6 +26,7 @@ Vagrant.configure(2) do |config|
 
   # Create a private network, which allows host-only access to the machine
   # using a specific IP.
+  # config.vm.network "private_network", ip: "192.168.33.10"
 
   # Create a public network, which generally matched to bridged network.
   # Bridged networks make the machine appear as another physical device on
@@ -54,10 +43,13 @@ Vagrant.configure(2) do |config|
   # backing providers for Vagrant. These expose provider-specific options.
   # Example for VirtualBox:
   #
-  config.vm.provider "virtualbox" do |vb|
-    # Customize the amount of memory on the VM:
-    vb.memory = "1500"
-  end
+  # config.vm.provider "virtualbox" do |vb|
+  #   # Display the VirtualBox GUI when booting the machine
+  #   vb.gui = true
+  #
+  #   # Customize the amount of memory on the VM:
+  #   vb.memory = "1024"
+  # end
   #
   # View the documentation for the provider you are using for more
   # information on available options.
@@ -77,47 +69,28 @@ Vagrant.configure(2) do |config|
   #   sudo apt-get install -y apache2
   # SHELL
 
-  config.berkshelf.enabled = true
+  config.vm.provider :aws do |aws, override|
+    aws.region = "eu-west-1"
+    aws.access_key_id = ENV['AWS_ACCESS_KEY_ID']
+    aws.secret_access_key = ENV['AWS_SECRET_ACCESS_KEY']
+    aws.instance_type = "t2.small"
 
-  # Define the box names and ips
-  nodes = []
-  (0..NODE_COUNT-1).each do |i|
-    name = "node#{i}"
-    ip = NETWORK + (FIRST_IP + i).to_s
-    nodes << {'name' => name, 'ip' => ip}
-  end
-
-  nodes.each do |node|
-    config.vm.define node['name'] do |config2|
-      config2.vm.network "private_network", ip: node['ip']
-      config2.vm.provision "chef_solo" do |chef|
-        chef.node_name = node['name']
-        chef.json = {
-          "cassandra" => {
-            "seeds" => nodes.first(SEED_NODE_COUNT).collect { |e| e['ip'] }.join(","),
-            "cluster_name" => "my_cluster",
-            "listen_address" => node['ip'],
-            "broadcast_address" => node['ip'],
-            "broadcast_rpc_address" => node['ip'],
-            "opscenter" => {
-              "agent" => {
-                "server_host" => NETWORK + OPSCENTER_SERVER_IP.to_s,
-                "local_interface" => node['ip'],
-                "agent_rpc_broadcast_address" => node['ip']
-              }
-            }
-          }
-        }
-        chef.run_list = ["recipe[cassandra-example::cassandra]"]
-      end
+    aws.region_config "eu-west-1" do |region|
+      region.ami = "ami-55e7c022"
+      region.security_groups = ["sg-c815faac"]
+      region.subnet_id = "subnet-0cae2055"
+      region.associate_public_ip = true
+      region.keypair_name = "test-server-eu-west-1"
     end
+
+    override.ssh.username = "ubuntu"
+    override.ssh.private_key_path = ENV['AWS_KEY_PATH']
   end
 
-  config.vm.define "opscenterd" do |config2|
-    config2.vm.network "private_network", ip: NETWORK + OPSCENTER_SERVER_IP.to_s
-    config2.vm.provision "chef_solo" do |chef|
-      chef.node_name = "opscenterd"
-      chef.run_list = ["recipe[cassandra-example::opscenterd]"]
-    end
-  end
+  config.vm.provision "shell", inline: <<-SHELL
+    echo "deb http://debian.datastax.com/community stable main" | tee -a /etc/apt/sources.list.d/cassandra.sources.list
+    curl -L http://debian.datastax.com/debian/repo_key | sudo apt-key add -
+    apt-get update
+    apt-get -y install dsc21 cassandra=2.1.9
+SHELL
 end
